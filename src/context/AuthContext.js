@@ -144,7 +144,11 @@ export function AuthProvider({ children }) {
       text:    'Welcome to ScheduForge! Your manager will post your schedule soon.',
     });
 
-    // 6. Load profile so redirect works
+    // 6. Load profile so redirect works — reset the guard first because
+    //    onAuthStateChange may have already run loadProfileAndOrg (before the
+    //    profile row existed) and left loadingRef=true, which would cause an
+    //    early return here and leave profile null forever.
+    loadingRef.current = false;
     await loadProfileAndOrg(authData.user.id);
   }, []);
 
