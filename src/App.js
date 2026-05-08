@@ -9,6 +9,7 @@ import { SignUp, SignIn, ForgotPassword, ResetPassword, AcceptInvite } from './p
 import { EmployeeDashboard, EmployeeSchedule, AvailableShifts, MyRequests, EmpNotifications } from './pages/EmployeePages';
 import { ManagerDashboard, ScheduleBuilder, ManagerRequests, ManagerEmployees, ManagerNotifications } from './pages/ManagerPages';
 import Billing from './pages/Billing';
+import Landing from './pages/Landing';
 
 // ── Protected layout ──────────────────────────────────────────────────────────
 function AppLayout({ children, requireRole }) {
@@ -34,11 +35,11 @@ function AppLayout({ children, requireRole }) {
   );
 }
 
-// ── Root redirect ─────────────────────────────────────────────────────────────
+// ── Root: landing for guests, dashboard redirect for authenticated users ───────
 function Root() {
   const { isAuthenticated, profile, loading } = useAuth();
   if (loading) return <LoadingScreen />;
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (!isAuthenticated) return <Landing />;
   return <Navigate to={profile?.role === 'manager' ? '/manager/dashboard' : '/dashboard'} replace />;
 }
 
