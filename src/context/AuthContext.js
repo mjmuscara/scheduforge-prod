@@ -10,24 +10,21 @@ export function AuthProvider({ children }) {
   const [loading,  setLoading]  = useState(true);
 
   // ── Load profile + org ────────────────────────────────────────────────────
-  // No concurrency guard — concurrent calls are harmless (same data).
-  // maybeSingle() silently returns null when no row exists (no error thrown),
-  // which happens transiently during invite acceptance before the profile is created.
   async function loadProfileAndOrg(userId) {
     const { data: prof, error } = await supabase
       .from('profiles')
       .select('*, organizations(*)')
       .eq('id', userId)
-      .maybeSingle();
+      .single();
     if (prof) {
       setProfile(prof);
       setOrg(prof.organizations);
-    } else if (error) {
-      // Real query error — clear auth state
+    } else if (error?.code !== 'PGRST116') {
+      // PGRST116 = row not found — transient during invite acceptance, leave state alone
+      // Any other error is a real failure — clear auth state
       setProfile(null);
       setOrg(null);
     }
-    // No row + no error: profile not created yet (invite flow) — leave state unchanged
   }
 
   // ── Bootstrap on mount ────────────────────────────────────────────────────
