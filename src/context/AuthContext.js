@@ -15,18 +15,25 @@ export function AuthProvider({ children }) {
     if (loadingRef.current) return;
     loadingRef.current = true;
     try {
+      // maybeSingle() returns null (no error) when no row found.
+      // We intentionally do NOT reset profile/org to null when no row is found —
+      // during invite acceptance the profile row is created after signUp fires
+      // onAuthStateChange, so "not found" is transient, not a real auth failure.
+      // acceptInvite() sets the profile directly once it creates the row.
       const { data: prof, error } = await supabase
         .from('profiles')
         .select('*, organizations(*)')
         .eq('id', userId)
-        .single();
-      if (error || !prof) {
-        setProfile(null);
-        setOrg(null);
-      } else {
+        .maybeSingle();
+      if (prof) {
         setProfile(prof);
         setOrg(prof.organizations);
+      } else if (error) {
+        // A real query error (network failure, RLS issue) — clear auth state.
+        setProfile(null);
+        setOrg(null);
       }
+      // No row found and no error: profile not created yet — leave state unchanged.
     } finally {
       loadingRef.current = false;
     }
@@ -34,25 +41,30 @@ export function AuthProvider({ children }) {
 
   // ── Bootstrap on mount ────────────────────────────────────────────────────
   useEffect(() => {
-    // Get existing session first
+    // Wrap both callbacks in try/finally so setLoading(false) is always called
+    // even if loadProfileAndOrg throws (network error, etc.). Without this the
+    // app stays on the loading screen forever.
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session);
-      if (session?.user) {
-        await loadProfileAndOrg(session.user.id);
+      try {
+        setSession(session);
+        if (session?.user) await loadProfileAndOrg(session.user.id);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
-    // Listen for auth changes (login, logout, token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setSession(session);
-      if (session?.user) {
-        await loadProfileAndOrg(session.user.id);
-      } else {
-        setProfile(null);
-        setOrg(null);
+      try {
+        setSession(session);
+        if (session?.user) {
+          await loadProfileAndOrg(session.user.id);
+        } else {
+          setProfile(null);
+          setOrg(null);
+        }
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
