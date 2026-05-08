@@ -18,7 +18,6 @@ export function ManagerDashboard() {
   const { notifications } = useNotifications();
 
   const pending = requests.filter(r => r.status === 'pending');
-  const openShifts = [];  // simplified for dashboard
 
   async function handleReview(requestId, decision) {
     const req = requests.find(r => r.id === requestId);
@@ -299,7 +298,7 @@ export function ManagerRequests() {
 
 // ── Employees ─────────────────────────────────────────────────────────────────
 export function ManagerEmployees() {
-  const { org, profile } = useAuth();
+  const { org } = useAuth();
   const { employees, loading, reload } = useEmployees();
   const { invites, sendInvite, revokeInvite } = useInvites();
   const { toast, show } = useToast();

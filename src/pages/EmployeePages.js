@@ -17,7 +17,7 @@ export function EmployeeDashboard() {
   const { shifts: myShifts, loading } = useMyShifts(weekStart, weekEnd);
   const { available } = useAvailableShifts();
   const { requests } = useMyRequests();
-  const { notifications, unreadCount } = useNotifications();
+  const { unreadCount } = useNotifications();
   const [postModal, setPostModal] = useState(null);
   const [reason, setReason] = useState('');
 
@@ -27,7 +27,7 @@ export function EmployeeDashboard() {
 
   async function handlePost(e) {
     e.preventDefault();
-    const { data: avail } = await supabase.from('available_shifts').insert({ org_id: org.id, shift_id: postModal.id, posted_by: profile.id, reason }).select().single();
+    await supabase.from('available_shifts').insert({ org_id: org.id, shift_id: postModal.id, posted_by: profile.id, reason }).select().single();
     // Notify other employees
     const { data: others } = await supabase.from('profiles').select('id').eq('org_id', org.id).eq('role','employee').neq('id', profile.id);
     if (others?.length) await supabase.from('notifications').insert(others.map(u => ({ org_id: org.id, user_id: u.id, text: `New shift available: ${postModal.position} on ${postModal.shift_date}. Tap to claim.` })));

@@ -206,7 +206,7 @@ export function useNotifications() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [profile?.id]); // only re-run when user changes, not on every render
+  }, [profile?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const markAllRead = useCallback(async () => {
     if (!profile) return;
