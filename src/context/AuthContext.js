@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 
 const AuthContext = createContext(null);
@@ -8,28 +8,34 @@ export function AuthProvider({ children }) {
   const [profile,  setProfile]  = useState(null);
   const [org,      setOrg]      = useState(null);
   const [loading,  setLoading]  = useState(true);
+  const loadingRef = useRef(false);
 
   // ── Load profile + org ────────────────────────────────────────────────────
   async function loadProfileAndOrg(userId) {
-    const { data: prof, error } = await supabase
-      .from('profiles')
-      .select('*, organizations(*)')
-      .eq('id', userId)
-      .single();
-    if (prof) {
-      setProfile(prof);
-      setOrg(prof.organizations);
-    } else if (error?.code !== 'PGRST116') {
-      // PGRST116 = row not found — transient during invite acceptance, leave state alone
-      // Any other error is a real failure — clear auth state
-      setProfile(null);
-      setOrg(null);
+    if (loadingRef.current) return;
+    loadingRef.current = true;
+    try {
+      const { data: prof, error } = await supabase
+        .from('profiles')
+        .select('*, organizations(*)')
+        .eq('id', userId)
+        .single();
+      if (error || !prof) {
+        setProfile(null);
+        setOrg(null);
+      } else {
+        setProfile(prof);
+        setOrg(prof.organizations);
+      }
+    } finally {
+      loadingRef.current = false;
     }
   }
 
   // ── Bootstrap on mount ────────────────────────────────────────────────────
   useEffect(() => {
-    // Safety net: if Supabase takes > 8s (network stall, etc.) unblock the UI
+    // Safety net: force loading=false after 8s so a network stall never
+    // leaves the app permanently stuck on the loading screen.
     const timeout = setTimeout(() => setLoading(false), 8000);
 
     supabase.auth.getSession().then(async ({ data: { session } }) => {
@@ -98,7 +104,6 @@ export function AuthProvider({ children }) {
 
   // ── Accept invite (employee onboarding) ───────────────────────────────────
   const acceptInvite = useCallback(async ({ token, password, name }) => {
-    // 1. Look up invite
     const { data: invite, error: invErr } = await supabase
       .from('invites')
       .select('*')
@@ -108,7 +113,6 @@ export function AuthProvider({ children }) {
       .single();
     if (invErr || !invite) throw new Error('Invalid or expired invite link.');
 
-    // 2. Create auth user
     const { data: authData, error: authErr } = await supabase.auth.signUp({
       email: invite.email,
       password,
@@ -116,7 +120,6 @@ export function AuthProvider({ children }) {
     if (authErr) throw authErr;
     if (!authData.user) throw new Error('Failed to create account. Please try again.');
 
-    // 3. Create employee profile
     const colors = [['#e8f0fc','#1a5fb4'],['#fef3e2','#a35c0a'],['#fdecea','#c0392b'],['#f0eeff','#5c3ab4']];
     const [color, textColor] = colors[Math.floor(Math.random() * colors.length)];
     const { error: profErr } = await supabase.from('profiles').insert({
@@ -132,7 +135,6 @@ export function AuthProvider({ children }) {
     });
     if (profErr) throw profErr;
 
-    // 4. Mark invite accepted + welcome notification
     await supabase.from('invites').update({ accepted: true }).eq('id', invite.id);
     await supabase.from('notifications').insert({
       org_id:  invite.org_id,
@@ -140,8 +142,8 @@ export function AuthProvider({ children }) {
       text:    'Welcome to ScheduForge! Your manager will post your schedule soon.',
     });
 
-    // 5. Fetch profile directly and set state — bypasses loadProfileAndOrg to
-    //    avoid the race where onAuthStateChange fires before the profile row exists.
+    // Fetch profile directly after creating it — bypasses loadingRef so we
+    // don't race with the onAuthStateChange call that fires before the row exists.
     const { data: prof } = await supabase
       .from('profiles')
       .select('*, organizations(*)')
