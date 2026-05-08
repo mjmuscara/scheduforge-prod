@@ -298,7 +298,6 @@ export function ManagerRequests() {
 
 // ── Employees ─────────────────────────────────────────────────────────────────
 export function ManagerEmployees() {
-  const { org } = useAuth();
   const { employees, loading, reload } = useEmployees();
   const { invites, sendInvite, revokeInvite } = useInvites();
   const { toast, show } = useToast();
