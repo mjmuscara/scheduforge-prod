@@ -125,6 +125,38 @@ alter table public.available_shifts enable row level security;
 alter table public.shift_requests   enable row level security;
 alter table public.notifications    enable row level security;
 
+-- ── Signup: create org + manager profile atomically ─────────────────────────
+-- SECURITY DEFINER so it runs as the function owner, bypassing RLS.
+-- Called during manager signup before the user has a profile (my_org_id() = null).
+create or replace function public.create_organization_and_profile(
+  org_name      text,
+  org_slug      text,
+  manager_name  text,
+  manager_email text,
+  user_id       uuid
+)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  new_org_id uuid;
+  palette    text[][] := array[
+    array['#e8f0fc','#1a5fb4'],
+    array['#fef3e2','#a35c0a'],
+    array['#fdecea','#c0392b'],
+    array['#f0eeff','#5c3ab4']
+  ];
+  pair text[];
+begin
+  insert into public.organizations (name, slug, plan, max_employees)
+  values (org_name, org_slug, 'trial', 5)
+  returning id into new_org_id;
+
+  pair := palette[1 + (floor(random() * 4))::int];
+
+  insert into public.profiles (id, org_id, name, email, role, avatar_color, avatar_text_color)
+  values (user_id, new_org_id, manager_name, manager_email, 'manager', pair[1], pair[2]);
+end;
+$$;
+
 -- Helper: get current user's org_id
 create or replace function public.my_org_id()
 returns uuid language sql stable security definer as $$
