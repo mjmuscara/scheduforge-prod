@@ -10,7 +10,7 @@
   padding: 0 48px; height: 64px;
   display: flex; align-items: center; gap: 32px;
 }
-.land-logo { font-size: 17px; font-weight: 800; color: var(--accent); letter-spacing: -0.5px; flex-shrink: 0; }
+.land-logo { font-size: 17px; font-weight: 800; color: var(--accent); letter-spacing: -0.5px; flex-shrink: 0; display: flex; align-items: center; gap: 8px; }
 .land-nav-links { display: flex; gap: 24px; }
 .land-nav-link { font-size: 14px; color: var(--muted); font-weight: 500; transition: color 0.15s; }
 .land-nav-link:hover { color: var(--text); }
@@ -153,7 +153,7 @@
   padding: 36px 48px; border-top: 1px solid var(--border);
   display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
 }
-.land-footer-logo { font-size: 15px; font-weight: 800; color: var(--accent); letter-spacing: -0.5px; }
+.land-footer-logo { font-size: 15px; font-weight: 800; color: var(--accent); letter-spacing: -0.5px; display: flex; align-items: center; gap: 7px; }
 .land-footer-links { display: flex; gap: 20px; }
 .land-footer-links a { font-size: 13px; color: var(--muted); transition: color 0.15s; }
 .land-footer-links a:hover { color: var(--text); }

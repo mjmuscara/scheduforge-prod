@@ -36,6 +36,20 @@ export default function Billing() {
   const [upgrading, setUpgrading] = useState(null); // plan id currently redirecting
   const [portalLoading, setPortalLoading] = useState(false);
 
+  // When the user presses back from Stripe, the browser restores this page
+  // from bfcache with React state frozen — upgrading/portalLoading stay true.
+  // pageshow with persisted=true detects bfcache restoration and resets them.
+  useEffect(() => {
+    const handlePageShow = (e) => {
+      if (e.persisted) {
+        setUpgrading(null);
+        setPortalLoading(false);
+      }
+    };
+    window.addEventListener('pageshow', handlePageShow);
+    return () => window.removeEventListener('pageshow', handlePageShow);
+  }, []);
+
   // Handle return from Stripe checkout
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
