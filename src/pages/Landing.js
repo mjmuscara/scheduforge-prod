@@ -108,7 +108,7 @@ export default function Landing() {
 
       {/* ── Nav ──────────────────────────────────────────────────────────── */}
       <nav className="land-nav">
-        <div className="land-logo"><LogoMark size={26} />ScheduForge</div>
+        <div className="land-logo"><img src="/schedulogo.png" alt="ScheduForge" className="land-logo-img" />ScheduForge</div>
         <div className="land-nav-links">
           <a href="#features" className="land-nav-link">Features</a>
           <a href="#pricing" className="land-nav-link">Pricing</a>
@@ -225,7 +225,7 @@ export default function Landing() {
 
       {/* ── Footer ───────────────────────────────────────────────────────── */}
       <footer className="land-footer">
-        <div className="land-footer-logo"><LogoMark size={20} />ScheduForge</div>
+        <div className="land-footer-logo"><img src="/schedulogo.png" alt="ScheduForge" className="land-logo-img land-logo-img-sm" />ScheduForge</div>
         <div className="land-footer-links">
           <Link to="/blog">Blog</Link>
           <Link to="/login">Sign in</Link>

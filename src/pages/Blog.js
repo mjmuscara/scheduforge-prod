@@ -3,27 +3,13 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import { posts } from '../data/blogPosts';
 import './Blog.css';
 
-function LogoMark({ size = 24 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
-      <rect width="32" height="32" rx="7" fill="#1a5fb4"/>
-      <rect x="7" y="9" width="18" height="16" rx="2" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="1.5"/>
-      <line x1="7" y1="14" x2="25" y2="14" stroke="rgba(255,255,255,0.9)" strokeWidth="1.5"/>
-      <line x1="12" y1="7" x2="12" y2="11" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
-      <line x1="20" y1="7" x2="20" y2="11" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
-      <rect x="10" y="17" width="3" height="2.5" rx="0.5" fill="white"/>
-      <rect x="14.5" y="17" width="3" height="2.5" rx="0.5" fill="white"/>
-      <rect x="19" y="17" width="3" height="2.5" rx="0.5" fill="white"/>
-      <rect x="10" y="21" width="3" height="2.5" rx="0.5" fill="white"/>
-      <rect x="14.5" y="21" width="3" height="2.5" rx="0.5" fill="white"/>
-    </svg>
-  );
-}
-
 function BlogNav({ activeSlug }) {
   return (
     <nav className="blog-nav">
-      <Link to="/" className="blog-logo"><LogoMark size={26} />ScheduForge</Link>
+      <Link to="/" className="blog-logo">
+        <img src="/schedulogo.png" alt="ScheduForge" className="blog-logo-img" />
+        ScheduForge
+      </Link>
       <div className="blog-nav-links">
         <a href="/#features" className="blog-nav-link">Features</a>
         <a href="/#pricing" className="blog-nav-link">Pricing</a>
@@ -40,7 +26,10 @@ function BlogNav({ activeSlug }) {
 function BlogFooter() {
   return (
     <footer className="blog-footer">
-      <div className="blog-footer-logo"><LogoMark size={20} />ScheduForge</div>
+      <div className="blog-footer-logo">
+        <img src="/schedulogo.png" alt="ScheduForge" className="blog-logo-img blog-logo-img-sm" />
+        ScheduForge
+      </div>
       <div className="blog-footer-links">
         <Link to="/blog">Blog</Link>
         <Link to="/login">Sign in</Link>
@@ -66,6 +55,31 @@ function renderNode(node, i) {
       <ol key={i} className="bp-ol">
         {node.v.map((li, j) => <li key={j}>{li}</li>)}
       </ol>
+    );
+    case 'table': return (
+      <div key={i} className="bp-table-wrap">
+        <table className="bp-table">
+          <thead>
+            <tr>{node.headers.map((h, j) => <th key={j}>{h}</th>)}</tr>
+          </thead>
+          <tbody>
+            {node.rows.map((row, j) => (
+              <tr key={j}>{row.map((cell, k) => <td key={k}>{cell}</td>)}</tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+    case 'callout': return (
+      <div key={i} className="bp-callout">
+        {node.title && <div className="bp-callout-title">{node.title}</div>}
+        {node.items && (
+          <ol className="bp-callout-list">
+            {node.items.map((item, j) => <li key={j}>{item}</li>)}
+          </ol>
+        )}
+        {node.v && <p className="bp-callout-text">{node.v}</p>}
+      </div>
     );
     case 'cta': return (
       <div key={i} className="bp-cta-box">

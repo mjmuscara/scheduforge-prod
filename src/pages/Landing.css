@@ -11,6 +11,8 @@
   display: flex; align-items: center; gap: 32px;
 }
 .land-logo { font-size: 17px; font-weight: 800; color: var(--accent); letter-spacing: -0.5px; flex-shrink: 0; display: flex; align-items: center; gap: 8px; }
+.land-logo-img { height: 28px; width: auto; object-fit: contain; flex-shrink: 0; }
+.land-logo-img-sm { height: 22px; }
 .land-nav-links { display: flex; gap: 24px; }
 .land-nav-link { font-size: 14px; color: var(--muted); font-weight: 500; transition: color 0.15s; }
 .land-nav-link:hover { color: var(--text); }
