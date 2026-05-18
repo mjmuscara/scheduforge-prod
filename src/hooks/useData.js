@@ -363,6 +363,34 @@ export function useInvites() {
   useEffect(() => { load(); }, [load]);
 
   const sendInvite = useCallback(async ({ name, email, position, department, role = 'employee' }) => {
+    const now = new Date().toISOString();
+
+    if (role === 'employee') {
+      const [{ count: active }, { count: pending }] = await Promise.all([
+        supabase.from('profiles').select('*', { count: 'exact', head: true })
+          .eq('org_id', org.id).eq('role', 'employee').eq('is_active', true),
+        supabase.from('invites').select('*', { count: 'exact', head: true })
+          .eq('org_id', org.id).eq('role', 'employee').eq('accepted', false).gt('expires_at', now),
+      ]);
+      const total = (active ?? 0) + (pending ?? 0);
+      if (total >= org.max_employees) {
+        const planName = org.plan.charAt(0).toUpperCase() + org.plan.slice(1);
+        throw new Error(`Your ${planName} plan allows up to ${org.max_employees} employees. Upgrade to add more.`);
+      }
+    }
+
+    if (role === 'manager' && org.plan === 'starter') {
+      const [{ count: active }, { count: pending }] = await Promise.all([
+        supabase.from('profiles').select('*', { count: 'exact', head: true })
+          .eq('org_id', org.id).in('role', ['manager', 'owner']).eq('is_active', true),
+        supabase.from('invites').select('*', { count: 'exact', head: true })
+          .eq('org_id', org.id).eq('role', 'manager').eq('accepted', false).gt('expires_at', now),
+      ]);
+      if ((active ?? 0) + (pending ?? 0) >= 2) {
+        throw new Error('Your Starter plan allows up to 2 managers. Upgrade to Growth for unlimited managers.');
+      }
+    }
+
     const { data, error } = await supabase
       .from('invites')
       .insert({ org_id: org.id, name, email, position, department, invited_by: profile.id, role })
@@ -374,7 +402,8 @@ export function useInvites() {
   }, [org, profile, load]);
 
   const revokeInvite = useCallback(async (inviteId) => {
-    await supabase.from('invites').delete().eq('id', inviteId);
+    const { error } = await supabase.from('invites').delete().eq('id', inviteId);
+    if (error) throw error;
     await load();
   }, [load]);
 

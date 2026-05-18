@@ -569,7 +569,10 @@ export function ManagerEmployees() {
                 <div className="invite-pill-email">{inv.email} · {inv.position}</div>
               </div>
               <Badge status="pending" />
-              <Btn size="sm" variant="ghost" onClick={() => revokeInvite(inv.id)}>Revoke</Btn>
+              <Btn size="sm" variant="ghost" onClick={async () => {
+                try { await revokeInvite(inv.id); show('Invite revoked.'); }
+                catch (err) { show(err.message || 'Failed to revoke invite.', 'error'); }
+              }}>Revoke</Btn>
             </div>
           ))}
         </Card>
