@@ -379,15 +379,19 @@ export function useInvites() {
       }
     }
 
-    if (role === 'manager' && org.plan === 'starter') {
-      const [{ count: active }, { count: pending }] = await Promise.all([
-        supabase.from('profiles').select('*', { count: 'exact', head: true })
-          .eq('org_id', org.id).in('role', ['manager', 'owner']).eq('is_active', true),
-        supabase.from('invites').select('*', { count: 'exact', head: true })
-          .eq('org_id', org.id).eq('role', 'manager').eq('accepted', false).gt('expires_at', now),
-      ]);
-      if ((active ?? 0) + (pending ?? 0) >= 2) {
-        throw new Error('Your Starter plan allows up to 2 managers. Upgrade to Growth for unlimited managers.');
+    if (role === 'manager') {
+      const managerLimit = org.plan === 'trial' ? 1 : org.plan === 'starter' ? 2 : null;
+      if (managerLimit !== null) {
+        const [{ count: active }, { count: pending }] = await Promise.all([
+          supabase.from('profiles').select('*', { count: 'exact', head: true })
+            .eq('org_id', org.id).in('role', ['manager', 'owner']).eq('is_active', true),
+          supabase.from('invites').select('*', { count: 'exact', head: true })
+            .eq('org_id', org.id).eq('role', 'manager').eq('accepted', false).gt('expires_at', now),
+        ]);
+        if ((active ?? 0) + (pending ?? 0) >= managerLimit) {
+          const planName = org.plan.charAt(0).toUpperCase() + org.plan.slice(1);
+          throw new Error(`Your ${planName} plan allows up to ${managerLimit} manager${managerLimit > 1 ? 's' : ''}. Upgrade to add more.`);
+        }
       }
     }
 
