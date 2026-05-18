@@ -9,6 +9,7 @@ const EMP_NAV = [
   { to: '/schedule',       label: 'My Schedule',      icon: '📅' },
   { to: '/available',      label: 'Available Shifts', icon: '🔓' },
   { to: '/requests',       label: 'My Requests',      icon: '📋' },
+  { to: '/availability',   label: 'My Availability',  icon: '🗓️' },
   { to: '/notifications',  label: 'Notifications',    icon: '🔔', notif: true },
 ];
 
@@ -18,16 +19,23 @@ const MGR_NAV = [
   { to: '/manager/requests',      label: 'Shift Requests',    icon: '📋' },
   { to: '/manager/employees',     label: 'Employees',         icon: '👥' },
   { to: '/manager/notifications', label: 'Notifications',     icon: '🔔', notif: true },
-  { to: '/billing',               label: 'Billing',           icon: '💳' },
 ];
 
 export default function Sidebar() {
-  const { profile, org, signOut, isManager } = useAuth();
+  const { profile, org, signOut, isManager, isOwner } = useAuth();
   const { unreadCount } = useNotifications();
   const navigate = useNavigate();
   const location = useLocation();
   const [open, setOpen] = useState(false);
-  const nav = isManager ? MGR_NAV : EMP_NAV;
+  const nav = React.useMemo(() => {
+    if (!isManager) return EMP_NAV;
+    if (!isOwner) return MGR_NAV;
+    const idx = MGR_NAV.findIndex(item => item.to === '/manager/employees');
+    const result = [...MGR_NAV];
+    result.splice(idx + 1, 0, { to: '/owner/hierarchy', label: 'Org Hierarchy', icon: '🏢' });
+    result.push({ to: '/billing', label: 'Billing', icon: '💳' });
+    return result;
+  }, [isManager, isOwner]);
 
   useEffect(() => { setOpen(false); }, [location.pathname]);
   useEffect(() => {
@@ -47,7 +55,7 @@ export default function Sidebar() {
       <aside className={`sidebar ${open ? 'open' : ''}`}>
         <div className="sidebar-logo">
           <span className="logo-text">Schedu<span className="logo-accent">Forge</span></span>
-          <span className="logo-badge">{isManager ? 'manager' : 'employee'}</span>
+          <span className="logo-badge">{profile?.role === 'owner' ? 'owner' : isManager ? 'manager' : 'employee'}</span>
         </div>
         <nav className="sidebar-nav">
           <div className="nav-label">Menu</div>

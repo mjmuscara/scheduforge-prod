@@ -231,3 +231,10 @@
   .modal-actions { flex-direction: column-reverse; }
   .modal-actions .btn { width: 100%; justify-content: center; }
 }
+
+/* ── Org Hierarchy Tree ── */
+.tree-node { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--border); }
+.tree-node:last-child { border-bottom:none; }
+.tree-node-info { flex:1; min-width:0; }
+.tree-node-name { font-size:14px; font-weight:500; }
+.tree-node-meta { font-size:12px; color:var(--muted); margin-top:2px; }

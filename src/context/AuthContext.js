@@ -3,6 +3,25 @@ import { supabase } from '../lib/supabase';
 
 const AuthContext = createContext(null);
 
+// ── Profile cache helpers ─────────────────────────────────────────────────────
+// Stores profile+org in localStorage so returning users skip the network query.
+const CACHE_KEY = 'sf_profile_cache';
+
+function readProfileCache(userId) {
+  try {
+    const p = JSON.parse(localStorage.getItem(CACHE_KEY));
+    if (!p || p.userId !== userId) return null;
+    if (Date.now() - p.cachedAt > 86_400_000) return null; // 24h TTL
+    return p;
+  } catch { return null; }
+}
+function writeProfileCache(userId, profile, org) {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ userId, profile, org, cachedAt: Date.now() })); } catch {}
+}
+function clearProfileCache() {
+  try { localStorage.removeItem(CACHE_KEY); } catch {}
+}
+
 export function AuthProvider({ children }) {
   const [session,  setSession]  = useState(undefined);
   const [profile,  setProfile]  = useState(null);
@@ -15,17 +34,33 @@ export function AuthProvider({ children }) {
     if (loadingRef.current) return;
     loadingRef.current = true;
     try {
-      const { data: prof, error } = await supabase
-        .from('profiles')
-        .select('*, organizations(*)')
-        .eq('id', userId)
-        .single();
-      if (error || !prof) {
+      // Race the query against an 8-second timeout so a hanging Supabase
+      // connection can never block the app indefinitely.
+      let result;
+      try {
+        result = await Promise.race([
+          supabase.from('profiles').select('*, organizations(*)').eq('id', userId).single(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
+        ]);
+      } catch {
+        return; // Timed out or network failure — leave existing profile state as-is
+      }
+      const { data: prof, error } = result;
+      if (error) {
+        // PGRST116 = no rows found; expected during signup before profile exists
+        if (error.code !== 'PGRST116') {
+          setProfile(null);
+          setOrg(null);
+        }
+        return;
+      }
+      if (!prof) {
         setProfile(null);
         setOrg(null);
       } else {
         setProfile(prof);
         setOrg(prof.organizations);
+        writeProfileCache(userId, prof, prof.organizations);
       }
     } finally {
       loadingRef.current = false;
@@ -36,30 +71,53 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     // Safety net: force loading=false after 8s so a network stall never
     // leaves the app permanently stuck on the loading screen.
-    const timeout = setTimeout(() => setLoading(false), 8000);
+    const timeout = setTimeout(() => {
+      loadingRef.current = false;
+      setLoading(false);
+    }, 8000);
 
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      try {
-        setSession(session);
-        if (session?.user) await loadProfileAndOrg(session.user.id);
-      } finally {
+      setSession(session);
+
+      if (!session?.user) {
+        // No active session — clear any stale cache
+        clearProfileCache();
         clearTimeout(timeout);
         setLoading(false);
+        return;
+      }
+
+      const cached = readProfileCache(session.user.id);
+      if (cached) {
+        // Cache hit: render immediately, refresh from network in background
+        setProfile(cached.profile);
+        setOrg(cached.org);
+        clearTimeout(timeout);
+        setLoading(false);
+        loadProfileAndOrg(session.user.id); // fire-and-forget background refresh
+      } else {
+        // No cache: normal blocking load (first visit or cache expired)
+        try {
+          await loadProfileAndOrg(session.user.id);
+        } finally {
+          clearTimeout(timeout);
+          setLoading(false);
+        }
       }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      try {
-        setSession(session);
-        if (session?.user) {
-          await loadProfileAndOrg(session.user.id);
-        } else {
-          setProfile(null);
-          setOrg(null);
-        }
-      } finally {
-        setLoading(false);
+      setSession(session);
+      if (session?.user) {
+        await loadProfileAndOrg(session.user.id);
+      } else {
+        setProfile(null);
+        setOrg(null);
       }
+      // loading is intentionally NOT set here — it is only for the initial
+      // bootstrap (getSession above). onAuthStateChange fires concurrently with
+      // getSession and prematurely calling setLoading(false) here causes a
+      // redirect-to-login flash before the profile query finishes.
     });
 
     return () => {
@@ -84,7 +142,18 @@ export function AuthProvider({ children }) {
     });
     if (fnErr) throw fnErr;
 
-    await loadProfileAndOrg(userId);
+    // Fetch profile directly after RPC creates it — bypasses loadingRef so we
+    // don't race with the onAuthStateChange call that fired before the row existed.
+    const { data: prof } = await supabase
+      .from('profiles')
+      .select('*, organizations(*)')
+      .eq('id', userId)
+      .single();
+    if (prof) {
+      setProfile(prof);
+      setOrg(prof.organizations);
+      writeProfileCache(userId, prof, prof.organizations);
+    }
   }, []);
 
   // ── Sign in ───────────────────────────────────────────────────────────────
@@ -96,6 +165,7 @@ export function AuthProvider({ children }) {
 
   // ── Sign out ──────────────────────────────────────────────────────────────
   const signOut = useCallback(async () => {
+    clearProfileCache();
     await supabase.auth.signOut();
     setSession(null);
     setProfile(null);
@@ -127,20 +197,28 @@ export function AuthProvider({ children }) {
       org_id:            invite.org_id,
       name:              name || invite.name,
       email:             invite.email,
-      role:              'employee',
+      role:              invite.role || 'employee',
       position:          invite.position,
       department:        invite.department,
       avatar_color:      color,
       avatar_text_color: textColor,
+      reports_to:        invite.invited_by,
     });
     if (profErr) throw profErr;
 
     await supabase.from('invites').update({ accepted: true }).eq('id', invite.id);
-    await supabase.from('notifications').insert({
-      org_id:  invite.org_id,
-      user_id: authData.user.id,
-      text:    'Welcome to ScheduForge! Your manager will post your schedule soon.',
-    });
+    await supabase.from('notifications').insert([
+      {
+        org_id:  invite.org_id,
+        user_id: authData.user.id,
+        text:    'Welcome to ScheduForge! Your manager will post your schedule soon.',
+      },
+      {
+        org_id:  invite.org_id,
+        user_id: invite.invited_by,
+        text:    `${name || invite.name} accepted your invite and joined the team.`,
+      },
+    ]);
 
     // Fetch profile directly after creating it — bypasses loadingRef so we
     // don't race with the onAuthStateChange call that fires before the row exists.
@@ -152,6 +230,7 @@ export function AuthProvider({ children }) {
     if (prof) {
       setProfile(prof);
       setOrg(prof.organizations);
+      writeProfileCache(authData.user.id, prof, prof.organizations);
     }
   }, []);
 
@@ -186,12 +265,13 @@ export function AuthProvider({ children }) {
   }, [org?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isAuthenticated = !!session && !!profile;
-  const isManager = profile?.role === 'manager';
+  const isOwner  = profile?.role === 'owner';
+  const isManager = profile?.role === 'manager' || profile?.role === 'owner';
 
   return (
     <AuthContext.Provider value={{
       session, profile, org, loading,
-      isAuthenticated, isManager,
+      isAuthenticated, isManager, isOwner,
       signUp, signIn, signOut, acceptInvite,
       sendPasswordReset, updatePassword, refreshOrg,
     }}>

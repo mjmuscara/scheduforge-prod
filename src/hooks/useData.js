@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 
@@ -19,20 +19,78 @@ export function useEmployees() {
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    if (!org) return;
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('org_id', org.id)
-      .eq('role', 'employee')
-      .eq('is_active', true)
-      .order('name');
-    setEmployees(data || []);
-    setLoading(false);
+    if (!org) { setLoading(false); return; }
+    setLoading(true);
+    try {
+      const { data } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('org_id', org.id)
+        .eq('role', 'employee')
+        .eq('is_active', true)
+        .order('name');
+      setEmployees(data || []);
+    } finally {
+      setLoading(false);
+    }
   }, [org]);
 
   useEffect(() => { load(); }, [load]);
   return { employees, loading, reload: load };
+}
+
+// ── All team members (employees + managers, excluding owners) ─────────────────
+export function useTeamMembers() {
+  const { org } = useAuth();
+  const [members, setMembers] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    if (!org) { setLoading(false); return; }
+    setLoading(true);
+    try {
+      const { data } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('org_id', org.id)
+        .neq('role', 'owner')
+        .eq('is_active', true)
+        .order('name');
+      setMembers(data || []);
+    } finally {
+      setLoading(false);
+    }
+  }, [org]);
+
+  useEffect(() => { load(); }, [load]);
+  return { members, loading, reload: load };
+}
+
+// ── Direct reports (people whose reports_to = current user) ──────────────────
+export function useDirectReports() {
+  const { org, profile } = useAuth();
+  const [reports, setReports] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    if (!org || !profile) { setLoading(false); return; }
+    setLoading(true);
+    try {
+      const { data } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('org_id', org.id)
+        .eq('reports_to', profile.id)
+        .eq('is_active', true)
+        .order('name');
+      setReports(data || []);
+    } finally {
+      setLoading(false);
+    }
+  }, [org, profile]);
+
+  useEffect(() => { load(); }, [load]);
+  return { reports, loading, reload: load };
 }
 
 // ── Shifts for a given week ───────────────────────────────────────────────────
@@ -42,18 +100,21 @@ export function useShifts(weekStart, weekEnd) {
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    if (!org || !weekStart) return;
+    if (!org || !weekStart) { setLoading(false); return; }
     setLoading(true);
-    const { data } = await supabase
-      .from('shifts')
-      .select('*, employee:profiles(id,name,avatar_color,avatar_text_color,position,department)')
-      .eq('org_id', org.id)
-      .gte('shift_date', weekStart)
-      .lte('shift_date', weekEnd)
-      .order('shift_date')
-      .order('start_time');
-    setShifts(data || []);
-    setLoading(false);
+    try {
+      const { data } = await supabase
+        .from('shifts')
+        .select('*, employee:profiles(id,name,avatar_color,avatar_text_color,position,department)')
+        .eq('org_id', org.id)
+        .gte('shift_date', weekStart)
+        .lte('shift_date', weekEnd)
+        .order('shift_date')
+        .order('start_time');
+      setShifts(data || []);
+    } finally {
+      setLoading(false);
+    }
   }, [org, weekStart, weekEnd]);
 
   useEffect(() => { load(); }, [load]);
@@ -67,18 +128,21 @@ export function useMyShifts(weekStart, weekEnd) {
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    if (!profile) return;
+    if (!profile) { setLoading(false); return; }
     setLoading(true);
-    let query = supabase
-      .from('shifts')
-      .select('*')
-      .eq('employee_id', profile.id)
-      .order('shift_date');
-    if (weekStart) query = query.gte('shift_date', weekStart);
-    if (weekEnd)   query = query.lte('shift_date', weekEnd);
-    const { data } = await query;
-    setShifts(data || []);
-    setLoading(false);
+    try {
+      let query = supabase
+        .from('shifts')
+        .select('*')
+        .eq('employee_id', profile.id)
+        .order('shift_date');
+      if (weekStart) query = query.gte('shift_date', weekStart);
+      if (weekEnd)   query = query.lte('shift_date', weekEnd);
+      const { data } = await query;
+      setShifts(data || []);
+    } finally {
+      setLoading(false);
+    }
   }, [profile, weekStart, weekEnd]);
 
   useEffect(() => { load(); }, [load]);
@@ -92,21 +156,24 @@ export function useAvailableShifts() {
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    if (!org) return;
+    if (!org) { setLoading(false); return; }
     setLoading(true);
-    const { data } = await supabase
-      .from('available_shifts')
-      .select(`
-        *,
-        shift:shifts(*),
-        posted_by_profile:profiles!available_shifts_posted_by_fkey(id,name,avatar_color,avatar_text_color)
-      `)
-      .eq('org_id', org.id)
-      .eq('is_open', true)
-      .neq('posted_by', profile?.id)         // don't show your own postings
-      .order('created_at', { ascending: false });
-    setAvailable(data || []);
-    setLoading(false);
+    try {
+      const { data } = await supabase
+        .from('available_shifts')
+        .select(`
+          *,
+          shift:shifts(*),
+          posted_by_profile:profiles!available_shifts_posted_by_fkey(id,name,avatar_color,avatar_text_color)
+        `)
+        .eq('org_id', org.id)
+        .eq('is_open', true)
+        .neq('posted_by', profile?.id)
+        .order('created_at', { ascending: false });
+      setAvailable(data || []);
+    } finally {
+      setLoading(false);
+    }
   }, [org, profile]);
 
   useEffect(() => { load(); }, [load]);
@@ -120,19 +187,22 @@ export function useShiftRequests() {
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    if (!org) return;
+    if (!org) { setLoading(false); return; }
     setLoading(true);
-    const { data } = await supabase
-      .from('shift_requests')
-      .select(`
-        *,
-        requester:profiles!shift_requests_requester_id_fkey(id,name,avatar_color,avatar_text_color),
-        available_shift:available_shifts(*, shift:shifts(*))
-      `)
-      .eq('org_id', org.id)
-      .order('created_at', { ascending: false });
-    setRequests(data || []);
-    setLoading(false);
+    try {
+      const { data } = await supabase
+        .from('shift_requests')
+        .select(`
+          *,
+          requester:profiles!shift_requests_requester_id_fkey(id,name,avatar_color,avatar_text_color),
+          available_shift:available_shifts(*, shift:shifts(*))
+        `)
+        .eq('org_id', org.id)
+        .order('created_at', { ascending: false });
+      setRequests(data || []);
+    } finally {
+      setLoading(false);
+    }
   }, [org]);
 
   useEffect(() => { load(); }, [load]);
@@ -146,15 +216,18 @@ export function useMyRequests() {
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    if (!profile) return;
+    if (!profile) { setLoading(false); return; }
     setLoading(true);
-    const { data } = await supabase
-      .from('shift_requests')
-      .select(`*, available_shift:available_shifts(*, shift:shifts(*))`)
-      .eq('requester_id', profile.id)
-      .order('created_at', { ascending: false });
-    setRequests(data || []);
-    setLoading(false);
+    try {
+      const { data } = await supabase
+        .from('shift_requests')
+        .select(`*, available_shift:available_shifts(*, shift:shifts(*))`)
+        .eq('requester_id', profile.id)
+        .order('created_at', { ascending: false });
+      setRequests(data || []);
+    } finally {
+      setLoading(false);
+    }
   }, [profile]);
 
   useEffect(() => { load(); }, [load]);
@@ -165,6 +238,7 @@ export function useMyRequests() {
 export function useNotifications() {
   const { profile } = useAuth();
   const [notifications, setNotifications] = useState([]);
+  const channelRef = useRef(null);
 
   const load = useCallback(async () => {
     if (!profile) return;
@@ -180,31 +254,32 @@ export function useNotifications() {
   useEffect(() => {
     if (!profile) return;
 
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+
     load();
 
-    // Use a unique channel name per user to avoid conflicts with StrictMode
-    const channelName = `notif-${profile.id}-${Date.now()}`;
-
-    // IMPORTANT: .on() must be called BEFORE .subscribe()
+    const channelName = `notif-${profile.id}-${Math.random().toString(36).slice(2)}`;
     const channel = supabase.channel(channelName);
 
-    channel.on(
-      'postgres_changes',
-      {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'notifications',
-        filter: `user_id=eq.${profile.id}`,
-      },
-      (payload) => {
-        setNotifications(prev => [payload.new, ...prev]);
-      }
-    );
+    channel
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${profile.id}` },
+        (payload) => { setNotifications(prev => [payload.new, ...prev]); })
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'notifications', filter: `user_id=eq.${profile.id}` },
+        (payload) => { setNotifications(prev => prev.map(n => n.id === payload.new.id ? payload.new : n)); });
 
     channel.subscribe();
+    channelRef.current = channel;
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
     };
   }, [profile?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -287,10 +362,10 @@ export function useInvites() {
 
   useEffect(() => { load(); }, [load]);
 
-  const sendInvite = useCallback(async ({ name, email, position, department }) => {
+  const sendInvite = useCallback(async ({ name, email, position, department, role = 'employee' }) => {
     const { data, error } = await supabase
       .from('invites')
-      .insert({ org_id: org.id, name, email, position, department, invited_by: profile.id })
+      .insert({ org_id: org.id, name, email, position, department, invited_by: profile.id, role })
       .select()
       .single();
     if (error) throw error;
@@ -304,4 +379,45 @@ export function useInvites() {
   }, [load]);
 
   return { invites, sendInvite, revokeInvite, reload: load };
+}
+
+// ── Employee availability ─────────────────────────────────────────────────────
+export function useAvailability(employeeId) {
+  const { org, profile } = useAuth();
+  const targetId = employeeId || profile?.id;
+  const [availability, setAvailability] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    if (!targetId) { setLoading(false); return; }
+    setLoading(true);
+    try {
+      const { data } = await supabase
+        .from('availability')
+        .select('*')
+        .eq('employee_id', targetId);
+      setAvailability(data || []);
+    } finally {
+      setLoading(false);
+    }
+  }, [targetId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const saveAvailability = useCallback(async (rows) => {
+    if (!org) return;
+    const upsertRows = rows.map(r => ({
+      ...r,
+      org_id: org.id,
+      employee_id: targetId,
+      updated_at: new Date().toISOString(),
+    }));
+    const { error } = await supabase
+      .from('availability')
+      .upsert(upsertRows, { onConflict: 'employee_id,day_of_week' });
+    if (error) throw error;
+    await load();
+  }, [org, targetId, load]);
+
+  return { availability, loading, saveAvailability };
 }

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { PageHeader, Card, Badge, Btn, Spinner, Toast } from '../components/UI';
 import { useToast } from '../hooks/useData';
@@ -15,6 +16,7 @@ const FUNCTIONS_URL = `${process.env.REACT_APP_SUPABASE_URL}/functions/v1`;
 
 async function authedPost(path, body) {
   const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error('Session expired — please sign out and sign back in.');
   const res = await fetch(`${FUNCTIONS_URL}/${path}`, {
     method:  'POST',
     headers: {
@@ -28,13 +30,14 @@ async function authedPost(path, body) {
 }
 
 export default function Billing() {
-  const { org, profile, refreshOrg } = useAuth();
+  const { org, profile, refreshOrg, isOwner } = useAuth();
+  const navigate = useNavigate();
   const { toast, show } = useToast();
-  const currentPlan = org?.plan || 'trial';
-  const hasPaidPlan = ['starter', 'growth', 'enterprise'].includes(currentPlan);
 
   const [upgrading, setUpgrading] = useState(null); // plan id currently redirecting
   const [portalLoading, setPortalLoading] = useState(false);
+
+  useEffect(() => { if (isOwner === false) navigate('/manager/dashboard', { replace: true }); }, [isOwner, navigate]);
 
   // When the user presses back from Stripe, the browser restores this page
   // from bfcache with React state frozen — upgrading/portalLoading stay true.
@@ -62,6 +65,11 @@ export default function Billing() {
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const currentPlan = org?.plan || 'trial';
+  const hasPaidPlan = ['starter', 'growth', 'enterprise'].includes(currentPlan);
+
+  if (!isOwner) return null;
 
   async function handleUpgrade(plan) {
     if (!plan.priceId) return;

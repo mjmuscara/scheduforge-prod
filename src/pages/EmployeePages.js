@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useMyShifts, useAvailableShifts, useMyRequests, useNotifications, useToast } from '../hooks/useData';
-import { Btn, Card, Badge, Avatar, StatCard, Modal, FormRow, Input, EmptyState, PageHeader, Toast, LoadingScreen } from '../components/UI';
+import { useMyShifts, useAvailableShifts, useMyRequests, useNotifications, useAvailability, useToast } from '../hooks/useData';
+import { Btn, Card, Badge, Avatar, StatCard, Modal, FormRow, Input, EmptyState, PageHeader, Toast, Spinner, LoadingScreen } from '../components/UI';
 import { fmtDate, fmtTime, getWeekStart, addDays, toISO, buildWeek, colorFor } from '../utils/dates';
 import { supabase } from '../lib/supabase';
 import '../components/UI.css';
@@ -27,6 +27,7 @@ export function EmployeeDashboard() {
 
   async function handlePost(e) {
     e.preventDefault();
+    if (!reason.trim()) return;
     await supabase.from('available_shifts').insert({ org_id: org.id, shift_id: postModal.id, posted_by: profile.id, reason }).select().single();
     // Notify other employees
     const { data: others } = await supabase.from('profiles').select('id').eq('org_id', org.id).eq('role','employee').neq('id', profile.id);
@@ -40,7 +41,7 @@ export function EmployeeDashboard() {
     if (existing) return show('You already requested this shift.', 'error');
     await supabase.from('shift_requests').insert({ org_id: org.id, available_shift_id: availId, requester_id: profile.id, status: 'pending' });
     const avail = available.find(a => a.id === availId);
-    const { data: mgrs } = await supabase.from('profiles').select('id').eq('org_id', org.id).eq('role','manager');
+    const { data: mgrs } = await supabase.from('profiles').select('id').eq('org_id', org.id).in('role',['manager','owner']);
     if (mgrs?.length) await supabase.from('notifications').insert(mgrs.map(m => ({ org_id: org.id, user_id: m.id, text: `${profile.name} requested to cover ${avail?.shift?.position} on ${avail?.shift?.shift_date}.` })));
     show('Request submitted!');
   }
@@ -61,7 +62,7 @@ export function EmployeeDashboard() {
         <Card>
           <div className="card-header"><div className="card-title">Upcoming shifts</div><Btn size="sm" onClick={()=>navigate('/schedule')}>View all</Btn></div>
           {myShifts.length===0
-            ? <EmptyState icon="📅" title="No shifts yet" message="Your manager hasn't scheduled you yet." />
+            ? <EmptyState icon="📅" title="No shifts yet" message="Your schedule hasn't been published yet. Check back soon." />
             : myShifts.slice(0,4).map(s => (
               <div key={s.id} className="list-item">
                 <div className="list-dot blue"></div>
@@ -96,7 +97,7 @@ export function EmployeeDashboard() {
         {postModal && (
           <form onSubmit={handlePost}>
             <div className="modal-info-box"><strong>{postModal.position}</strong><div style={{color:'var(--muted)',fontSize:13,marginTop:4}}>{fmtDate(postModal.shift_date)} · {fmtTime(postModal.start_time)} – {fmtTime(postModal.end_time)}</div></div>
-            <FormRow label="Reason (optional)"><Input value={reason} onChange={e=>setReason(e.target.value)} placeholder="e.g. medical appointment…" /></FormRow>
+            <FormRow label="Reason"><Input value={reason} onChange={e=>setReason(e.target.value)} placeholder="e.g. medical appointment…" required /></FormRow>
             <div className="modal-actions"><Btn onClick={()=>setPostModal(null)}>Cancel</Btn><Btn type="submit" variant="primary">Post shift</Btn></div>
           </form>
         )}
@@ -121,6 +122,7 @@ export function EmployeeSchedule() {
 
   async function handlePost(e) {
     e.preventDefault();
+    if (!reason.trim()) return;
     await supabase.from('available_shifts').insert({ org_id: org.id, shift_id: postModal.id, posted_by: profile.id, reason });
     const { data: others } = await supabase.from('profiles').select('id').eq('org_id',org.id).eq('role','employee').neq('id',profile.id);
     if (others?.length) await supabase.from('notifications').insert(others.map(u=>({ org_id:org.id, user_id:u.id, text:`New shift available: ${postModal.position} on ${postModal.shift_date}.` })));
@@ -164,13 +166,13 @@ export function EmployeeSchedule() {
               <tr key={s.id}><td>{fmtDate(s.shift_date)}</td><td><strong>{s.position}</strong></td><td>{fmtTime(s.start_time)}</td><td>{fmtTime(s.end_time)}</td><td>{s.duration_hours}h</td><td>{s.department}</td><td><Btn size="sm" onClick={()=>setPostModal(s)}>Post for coverage</Btn></td></tr>
             ))}</tbody>
           </table>
-          {shifts.length===0 && <div className="table-empty">No shifts scheduled this week.</div>}
+          {shifts.length===0 && <div className="table-empty">Your schedule hasn't been published yet. Check back soon.</div>}
         </div>
       </Card>
       <Modal isOpen={!!postModal} onClose={()=>{setPostModal(null);setReason('');}} title="Post shift for coverage">
         {postModal && <form onSubmit={handlePost}>
           <div className="modal-info-box"><strong>{postModal.position}</strong><div style={{color:'var(--muted)',fontSize:13,marginTop:4}}>{fmtDate(postModal.shift_date)} · {fmtTime(postModal.start_time)}–{fmtTime(postModal.end_time)}</div></div>
-          <FormRow label="Reason"><Input value={reason} onChange={e=>setReason(e.target.value)} placeholder="e.g. medical appointment…" /></FormRow>
+          <FormRow label="Reason"><Input value={reason} onChange={e=>setReason(e.target.value)} placeholder="e.g. medical appointment…" required /></FormRow>
           <div className="modal-actions"><Btn onClick={()=>setPostModal(null)}>Cancel</Btn><Btn type="submit" variant="primary">Post shift</Btn></div>
         </form>}
       </Modal>
@@ -189,7 +191,7 @@ export function AvailableShifts() {
     const already = requests.find(r => r.available_shift_id === a.id && r.status==='pending');
     if (already) return show('You already requested this shift.','error');
     await supabase.from('shift_requests').insert({ org_id: org.id, available_shift_id: a.id, requester_id: profile.id, status:'pending' });
-    const { data: mgrs } = await supabase.from('profiles').select('id').eq('org_id',org.id).eq('role','manager');
+    const { data: mgrs } = await supabase.from('profiles').select('id').eq('org_id',org.id).in('role',['manager','owner']);
     if (mgrs?.length) await supabase.from('notifications').insert(mgrs.map(m=>({ org_id:org.id, user_id:m.id, text:`${profile.name} requested to cover ${a.shift?.position} on ${a.shift?.shift_date}.` })));
     show('Request submitted!'); reload();
   }
@@ -243,6 +245,100 @@ export function MyRequests() {
           </table>
           {requests.length===0 && <div className="table-empty">No requests yet. Claim an available shift to get started.</div>}
         </div>
+      </Card>
+    </div>
+  );
+}
+
+// ── My Availability ───────────────────────────────────────────────────────────
+const AVAIL_DAYS = [
+  { label: 'Monday',    dow: 1 },
+  { label: 'Tuesday',   dow: 2 },
+  { label: 'Wednesday', dow: 3 },
+  { label: 'Thursday',  dow: 4 },
+  { label: 'Friday',    dow: 5 },
+  { label: 'Saturday',  dow: 6 },
+  { label: 'Sunday',    dow: 0 },
+];
+
+export function EmployeeAvailability() {
+  const { toast, show } = useToast();
+  const { availability, loading, saveAvailability } = useAvailability();
+  const [rows, setRows] = useState(
+    AVAIL_DAYS.map(d => ({ day_of_week: d.dow, is_available: false, start_time: '09:00', end_time: '17:00' }))
+  );
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (loading) return;
+    const map = {};
+    availability.forEach(a => { map[a.day_of_week] = a; });
+    setRows(AVAIL_DAYS.map(({ dow }) => ({
+      day_of_week:  dow,
+      is_available: map[dow]?.is_available ?? false,
+      start_time:   (map[dow]?.start_time || '09:00:00').slice(0, 5),
+      end_time:     (map[dow]?.end_time   || '17:00:00').slice(0, 5),
+    })));
+  }, [availability, loading]);
+
+  function update(dow, field, value) {
+    setRows(prev => prev.map(r => r.day_of_week === dow ? { ...r, [field]: value } : r));
+  }
+
+  async function handleSave(e) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await saveAvailability(rows);
+      show('Availability saved!');
+    } catch (err) {
+      show(err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) return <LoadingScreen />;
+
+  return (
+    <div className="page">
+      <Toast toast={toast} />
+      <PageHeader title="My availability" subtitle="Set which days and times you're available to work" />
+      <Card>
+        <form onSubmit={handleSave}>
+          <div style={{ display:'flex', flexDirection:'column' }}>
+            {AVAIL_DAYS.map(({ label, dow }) => {
+              const row = rows.find(r => r.day_of_week === dow) || { is_available: false, start_time: '09:00', end_time: '17:00' };
+              return (
+                <div key={dow} style={{ display:'flex', alignItems:'center', gap:16, padding:'12px 0', borderBottom:'1px solid var(--border)' }}>
+                  <label style={{ display:'flex', alignItems:'center', gap:8, width:130, cursor:'pointer', flexShrink:0 }}>
+                    <input
+                      type="checkbox"
+                      checked={row.is_available}
+                      onChange={e => update(dow, 'is_available', e.target.checked)}
+                      style={{ width:16, height:16, accentColor:'var(--accent)', cursor:'pointer' }}
+                    />
+                    <span style={{ fontSize:14, fontWeight: row.is_available ? 600 : 400, color: row.is_available ? 'var(--text)' : 'var(--muted)' }}>
+                      {label}
+                    </span>
+                  </label>
+                  {row.is_available ? (
+                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                      <Input type="time" value={row.start_time} onChange={e => update(dow, 'start_time', e.target.value)} style={{ width:120 }} />
+                      <span style={{ color:'var(--muted)', fontSize:14 }}>–</span>
+                      <Input type="time" value={row.end_time}   onChange={e => update(dow, 'end_time',   e.target.value)} style={{ width:120 }} />
+                    </div>
+                  ) : (
+                    <span style={{ fontSize:13, color:'var(--muted)' }}>Not available</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ marginTop:20, display:'flex', justifyContent:'flex-end' }}>
+            <Btn type="submit" variant="primary" disabled={saving}>{saving ? <Spinner /> : 'Save availability'}</Btn>
+          </div>
+        </form>
       </Card>
     </div>
   );
