@@ -3,22 +3,6 @@ import { Link } from 'react-router-dom';
 import { posts } from '../data/blogPosts';
 import './Landing.css';
 
-function LogoMark({ size = 24 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
-      <rect width="32" height="32" rx="7" fill="#1a5fb4"/>
-      <rect x="7" y="9" width="18" height="16" rx="2" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="1.5"/>
-      <line x1="7" y1="14" x2="25" y2="14" stroke="rgba(255,255,255,0.9)" strokeWidth="1.5"/>
-      <line x1="12" y1="7" x2="12" y2="11" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
-      <line x1="20" y1="7" x2="20" y2="11" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
-      <rect x="10" y="17" width="3" height="2.5" rx="0.5" fill="white"/>
-      <rect x="14.5" y="17" width="3" height="2.5" rx="0.5" fill="white"/>
-      <rect x="19" y="17" width="3" height="2.5" rx="0.5" fill="white"/>
-      <rect x="10" y="21" width="3" height="2.5" rx="0.5" fill="white"/>
-      <rect x="14.5" y="21" width="3" height="2.5" rx="0.5" fill="white"/>
-    </svg>
-  );
-}
 
 const FEATURES = [
   {
