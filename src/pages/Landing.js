@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { posts } from '../data/blogPosts';
 import './Landing.css';
 
 function LogoMark({ size = 24 }) {
@@ -111,6 +112,7 @@ export default function Landing() {
         <div className="land-nav-links">
           <a href="#features" className="land-nav-link">Features</a>
           <a href="#pricing" className="land-nav-link">Pricing</a>
+          <Link to="/blog" className="land-nav-link">Blog</Link>
         </div>
         <div className="land-nav-actions">
           <Link to="/login" className="land-nav-signin">Sign in</Link>
@@ -199,10 +201,33 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* ── Blog preview ─────────────────────────────────────────────────── */}
+      <section className="land-blog">
+        <div className="land-section-label">From the blog</div>
+        <h2 className="land-h2">Scheduling tips &amp; advice</h2>
+        <div className="land-blog-grid">
+          {posts.map(post => (
+            <Link key={post.slug} to={`/blog/${post.slug}`} className="land-blog-card">
+              <div className="land-blog-card-meta">
+                <span className="land-blog-cat">{post.category}</span>
+                <span className="land-blog-read">{post.readTime}</span>
+              </div>
+              <div className="land-blog-card-title">{post.title}</div>
+              <p className="land-blog-card-excerpt">{post.excerpt}</p>
+              <span className="land-blog-cta">Read more →</span>
+            </Link>
+          ))}
+        </div>
+        <div className="land-blog-all-wrap">
+          <Link to="/blog" className="land-blog-all">View all posts →</Link>
+        </div>
+      </section>
+
       {/* ── Footer ───────────────────────────────────────────────────────── */}
       <footer className="land-footer">
         <div className="land-footer-logo"><LogoMark size={20} />ScheduForge</div>
         <div className="land-footer-links">
+          <Link to="/blog">Blog</Link>
           <Link to="/login">Sign in</Link>
           <Link to="/signup">Create account</Link>
           <a href="mailto:sales@scheduforge.com">Contact</a>

@@ -18,6 +18,7 @@
 .land-nav-signin {
   font-size: 14px; color: var(--muted); font-weight: 500;
   padding: 7px 14px; border-radius: var(--radius-sm); transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
 }
 .land-nav-signin:hover { background: rgba(0,0,0,0.05); color: var(--text); }
 .land-cta-btn {
@@ -66,7 +67,7 @@
 }
 .land-h2 { font-size: 32px; font-weight: 800; letter-spacing: -1px; color: var(--text); margin-bottom: 12px; }
 .land-section-sub {
-  font-size: 15.5px; color: var(--muted); max-width: 480px; line-height: 1.6; margin-bottom: 52px;
+  font-size: 15.5px; color: var(--muted); max-width: 480px; line-height: 1.6; margin: 0 auto 52px;
 }
 
 /* ── Features ──────────────────────────────────────────────────────────────── */
@@ -148,6 +149,41 @@
 }
 .land-price-cta.primary:hover { background: rgba(255,255,255,0.25); border-color: rgba(255,255,255,0.5); color: #fff; }
 
+/* ── Blog preview ──────────────────────────────────────────────────────────── */
+.land-blog { padding: 88px 48px; background: var(--bg); text-align: center; }
+.land-blog-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px; max-width: 900px; margin: 0 auto 32px; text-align: left;
+}
+.land-blog-card {
+  display: flex; flex-direction: column; gap: 10px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 28px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.land-blog-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 4px 20px rgba(26,95,180,0.08);
+}
+.land-blog-card-meta { display: flex; align-items: center; gap: 10px; }
+.land-blog-cat {
+  background: var(--accent-light); color: var(--accent);
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.5px;
+  text-transform: uppercase; padding: 3px 10px; border-radius: 20px;
+}
+.land-blog-read { font-size: 12px; color: var(--hint); }
+.land-blog-card-title { font-size: 16px; font-weight: 700; color: var(--text); line-height: 1.35; }
+.land-blog-card-excerpt { font-size: 13.5px; color: var(--muted); line-height: 1.6; flex: 1; }
+.land-blog-cta { font-size: 13px; font-weight: 600; color: var(--accent); }
+.land-blog-all-wrap { text-align: center; }
+.land-blog-all {
+  display: inline-flex; align-items: center;
+  font-size: 14px; font-weight: 600; color: var(--accent);
+  padding: 10px 20px; border-radius: var(--radius-sm);
+  border: 1px solid var(--accent); transition: background 0.15s;
+}
+.land-blog-all:hover { background: var(--accent-light); }
+
 /* ── Footer ────────────────────────────────────────────────────────────────── */
 .land-footer {
   padding: 36px 48px; border-top: 1px solid var(--border);
@@ -169,10 +205,11 @@
 @media (max-width: 640px) {
   .land-nav { padding: 0 20px; }
   .land-nav-links { display: none; }
+  .land-nav-actions .land-cta-btn { display: none; }
   .land-hero { padding: 64px 20px 56px; }
   .land-h1 { font-size: 34px; letter-spacing: -1px; }
   .land-sub { font-size: 15px; }
-  .land-features, .land-steps, .land-pricing { padding: 60px 20px; }
+  .land-features, .land-steps, .land-pricing, .land-blog { padding: 60px 20px; }
   .land-price-grid { grid-template-columns: 1fr; }
   .land-footer { padding: 28px 20px; flex-direction: column; align-items: flex-start; gap: 16px; }
   .land-footer-copy { margin-left: 0; }
