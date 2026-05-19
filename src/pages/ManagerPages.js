@@ -31,7 +31,7 @@ function EmployeeAvailabilityView({ employeeId }) {
           <div key={dow} style={{ display:'flex', alignItems:'center', padding:'10px 0', borderBottom:'1px solid var(--border)' }}>
             <span style={{ width:110, fontSize:14, fontWeight:500 }}>{label}</span>
             {a?.is_available
-              ? <span style={{ fontSize:13, color:'var(--green)', fontWeight:500 }}>{(a.start_time||'09:00:00').slice(0,5)} – {(a.end_time||'17:00:00').slice(0,5)}</span>
+              ? <span style={{ fontSize:13, color:'var(--green)', fontWeight:500 }}>{fmtTime(a.start_time || '09:00:00')} – {fmtTime(a.end_time || '17:00:00')}</span>
               : <span style={{ fontSize:13, color:'var(--muted)' }}>Unavailable</span>
             }
           </div>
@@ -144,6 +144,8 @@ export function ScheduleBuilder() {
   const [tDays, setTDays]                 = useState([1,2,3,4,5]);
   const [templateLoaded, setTemplateLoaded] = useState(false);
   const [form, setForm] = useState({ employeeId:'', date:'', startTime:'', endTime:'', position:'', department:'' });
+  const [availWarn, setAvailWarn] = useState('');
+  const [copying, setCopying] = useState(false);
 
   useEffect(() => {
     if (!viewingManagerId) { setViewingTeam([]); return; }
@@ -167,14 +169,69 @@ export function ScheduleBuilder() {
   const employees = viewingManagerId ? viewingTeam : ownDirectReports;
   const knownPositions = [...new Set(employees.map(e => e.position).filter(Boolean))];
 
-  function openAdd(date='') { setPrefill(date); setForm(f=>({...f,date,employeeId:'',startTime:'',endTime:'',position:'',department:''})); setAddModal(true); }
+  function snapTo15(t) {
+    if (!t) return t;
+    const [h, m] = t.split(':').map(Number);
+    const snapped = Math.round(m / 15) * 15;
+    return `${String(h + (snapped === 60 ? 1 : 0)).padStart(2,'0')}:${String(snapped % 60).padStart(2,'0')}`;
+  }
+
+  // Warn if selected employee is unavailable for the chosen day/time
+  useEffect(() => {
+    if (!form.employeeId || !form.date) { setAvailWarn(''); return; }
+    const dow = new Date(form.date + 'T12:00:00').getDay();
+    supabase.from('availability').select('*')
+      .eq('employee_id', form.employeeId).eq('day_of_week', dow).maybeSingle()
+      .then(({ data: a }) => {
+        const emp = employees.find(e => e.id === form.employeeId);
+        const name = emp?.name?.split(' ')[0] || 'This employee';
+        const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+        if (!a) { setAvailWarn(''); return; }
+        if (!a.is_available) { setAvailWarn(`${name} is marked unavailable on ${days[dow]}s.`); return; }
+        if (form.startTime && a.start_time && form.endTime && a.end_time) {
+          if (form.startTime < a.start_time.slice(0,5) || form.endTime > a.end_time.slice(0,5)) {
+            setAvailWarn(`${name}'s availability on ${days[dow]}s is ${fmtTime(a.start_time)} – ${fmtTime(a.end_time)}.`);
+            return;
+          }
+        }
+        setAvailWarn('');
+      });
+  }, [form.employeeId, form.date, form.startTime, form.endTime]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleCopyLastWeek() {
+    setCopying(true);
+    try {
+      const prevStart = toISO(addDays(weekStart, -7));
+      const prevEnd   = toISO(addDays(weekStart, -1));
+      const { data: prevShifts } = await supabase.from('shifts').select('*')
+        .eq('org_id', org.id).gte('shift_date', prevStart).lte('shift_date', prevEnd);
+      if (!prevShifts?.length) { show('No shifts found from last week.', 'error'); return; }
+      const existingKeys = new Set(shifts.map(s => `${s.employee_id}_${s.shift_date}`));
+      const sched = await ensureSchedule(profile.id);
+      const newShifts = prevShifts
+        .map(s => {
+          const newDate = toISO(addDays(new Date(s.shift_date + 'T12:00:00'), 7));
+          return { org_id: org.id, schedule_id: sched.id, employee_id: s.employee_id, shift_date: newDate, start_time: s.start_time, end_time: s.end_time, position: s.position, department: s.department };
+        })
+        .filter(s => !existingKeys.has(`${s.employee_id}_${s.shift_date}`));
+      if (!newShifts.length) { show('All last week\'s shifts already exist this week.', 'error'); return; }
+      await supabase.from('shifts').insert(newShifts);
+      show(`Copied ${newShifts.length} shift${newShifts.length > 1 ? 's' : ''} from last week!`);
+      reloadShifts();
+    } catch (err) { show(err.message, 'error'); }
+    finally { setCopying(false); }
+  }
+
+  function openAdd(date='') { setPrefill(date); setAvailWarn(''); setForm(f=>({...f,date,employeeId:'',startTime:'',endTime:'',position:'',department:''})); setAddModal(true); }
 
   async function handleAdd(e) {
     e.preventDefault(); setSaving(true);
     try {
       const sched = await ensureSchedule(profile.id);
       const emp = employees.find(em => em.id === form.employeeId);
-      await supabase.from('shifts').insert({ org_id: org.id, schedule_id: sched.id, employee_id: form.employeeId, shift_date: form.date, start_time: form.startTime, end_time: form.endTime, position: form.position || emp?.position, department: form.department || emp?.department });
+      const startTime = snapTo15(form.startTime);
+      const endTime   = snapTo15(form.endTime);
+      await supabase.from('shifts').insert({ org_id: org.id, schedule_id: sched.id, employee_id: form.employeeId, shift_date: form.date, start_time: startTime, end_time: endTime, position: form.position || emp?.position, department: form.department || emp?.department });
       await supabase.from('notifications').insert({ org_id: org.id, user_id: form.employeeId, text: `A new shift has been added: ${form.position} on ${form.date}.` });
       show('Shift added!');
       setAddModal(false);
@@ -280,6 +337,7 @@ export function ScheduleBuilder() {
         action={
           <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
             <Btn size="sm" onClick={() => openAdd()}>+ Add shift</Btn>
+            <Btn size="sm" onClick={handleCopyLastWeek} disabled={copying}>{copying ? <Spinner /> : 'Copy last week'}</Btn>
             <Btn size="sm" onClick={() => setTemplateModal(true)}>Auto-generate</Btn>
             <Btn size="sm" variant="primary" onClick={handlePublish}>{schedule?.published ? '✓ Published' : 'Publish schedule'}</Btn>
           </div>
@@ -361,9 +419,10 @@ export function ScheduleBuilder() {
           </FormRow>
           <FormRow label="Date"><Input type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))} required /></FormRow>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-            <FormRow label="Start time"><Input type="time" value={form.startTime} onChange={e=>setForm(f=>({...f,startTime:e.target.value}))} required /></FormRow>
-            <FormRow label="End time">  <Input type="time" value={form.endTime}   onChange={e=>setForm(f=>({...f,endTime:e.target.value}))}   required /></FormRow>
+            <FormRow label="Start time"><Input type="time" step="900" value={form.startTime} onChange={e=>setForm(f=>({...f,startTime:e.target.value}))} required /></FormRow>
+            <FormRow label="End time">  <Input type="time" step="900" value={form.endTime}   onChange={e=>setForm(f=>({...f,endTime:e.target.value}))}   required /></FormRow>
           </div>
+          {availWarn && <div style={{background:'#fef9c3',border:'1px solid #fde047',borderRadius:'var(--radius-sm)',padding:'8px 12px',fontSize:13,color:'#854d0e',marginBottom:12}}>⚠ {availWarn}</div>}
           <FormRow label="Position"  ><Input value={form.position}   onChange={e=>setForm(f=>({...f,position:e.target.value}))}   placeholder="e.g. Cashier"    /></FormRow>
           <FormRow label="Department"><Input value={form.department} onChange={e=>setForm(f=>({...f,department:e.target.value}))} placeholder="e.g. Front End"  /></FormRow>
           <div className="modal-actions">
@@ -405,9 +464,9 @@ export function ScheduleBuilder() {
               </div>
               <Input type="number" min={1} max={20} value={slot.count}
                 onChange={e => setTSlots(prev => prev.map((s,j) => j===i ? {...s,count:+e.target.value} : s))} />
-              <Input type="time" value={slot.startTime}
+              <Input type="time" step="900" value={slot.startTime}
                 onChange={e => setTSlots(prev => prev.map((s,j) => j===i ? {...s,startTime:e.target.value} : s))} />
-              <Input type="time" value={slot.endTime}
+              <Input type="time" step="900" value={slot.endTime}
                 onChange={e => setTSlots(prev => prev.map((s,j) => j===i ? {...s,endTime:e.target.value} : s))} />
               <Btn size="sm" variant="danger" onClick={() => setTSlots(prev => prev.filter((_,j) => j!==i))}>✕</Btn>
             </div>

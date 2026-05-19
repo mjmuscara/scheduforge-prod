@@ -20,6 +20,13 @@ export function EmployeeDashboard() {
   const { unreadCount } = useNotifications();
   const [postModal, setPostModal] = useState(null);
   const [reason, setReason] = useState('');
+  const [postedIds, setPostedIds] = useState(new Set());
+
+  useEffect(() => {
+    if (!profile) return;
+    supabase.from('available_shifts').select('shift_id').eq('posted_by', profile.id).eq('is_open', true)
+      .then(({ data }) => setPostedIds(new Set((data || []).map(r => r.shift_id))));
+  }, [profile]);
 
   const pending = requests.filter(r => r.status === 'pending').length;
   const greetHour = new Date().getHours();
@@ -29,9 +36,9 @@ export function EmployeeDashboard() {
     e.preventDefault();
     if (!reason.trim()) return;
     await supabase.from('available_shifts').insert({ org_id: org.id, shift_id: postModal.id, posted_by: profile.id, reason }).select().single();
-    // Notify other employees
     const { data: others } = await supabase.from('profiles').select('id').eq('org_id', org.id).eq('role','employee').neq('id', profile.id);
     if (others?.length) await supabase.from('notifications').insert(others.map(u => ({ org_id: org.id, user_id: u.id, text: `New shift available: ${postModal.position} on ${postModal.shift_date}. Tap to claim.` })));
+    setPostedIds(prev => new Set([...prev, postModal.id]));
     show('Shift posted for coverage!');
     setPostModal(null); setReason('');
   }
@@ -70,7 +77,7 @@ export function EmployeeDashboard() {
                   <div className="list-title">{fmtDate(s.shift_date)}</div>
                   <div className="list-meta">{fmtTime(s.start_time)} – {fmtTime(s.end_time)} · {s.position}</div>
                 </div>
-                <Btn size="sm" onClick={() => setPostModal(s)}>Post</Btn>
+                {postedIds.has(s.id) ? <Btn size="sm" disabled>Posted</Btn> : <Btn size="sm" onClick={() => setPostModal(s)}>Post</Btn>}
               </div>
             ))
           }
@@ -115,6 +122,13 @@ export function EmployeeSchedule() {
   const { shifts, loading, reload } = useMyShifts(weekStart, weekEnd);
   const [postModal, setPostModal] = useState(null);
   const [reason, setReason] = useState('');
+  const [postedIds, setPostedIds] = useState(new Set());
+
+  useEffect(() => {
+    if (!profile) return;
+    supabase.from('available_shifts').select('shift_id').eq('posted_by', profile.id).eq('is_open', true)
+      .then(({ data }) => setPostedIds(new Set((data || []).map(r => r.shift_id))));
+  }, [profile]);
   const week = buildWeek(getWeekStart(new Date()));
   const byDate = {};
   shifts.forEach(s => { byDate[s.shift_date] = s; });
@@ -126,6 +140,7 @@ export function EmployeeSchedule() {
     await supabase.from('available_shifts').insert({ org_id: org.id, shift_id: postModal.id, posted_by: profile.id, reason });
     const { data: others } = await supabase.from('profiles').select('id').eq('org_id',org.id).eq('role','employee').neq('id',profile.id);
     if (others?.length) await supabase.from('notifications').insert(others.map(u=>({ org_id:org.id, user_id:u.id, text:`New shift available: ${postModal.position} on ${postModal.shift_date}.` })));
+    setPostedIds(prev => new Set([...prev, postModal.id]));
     show('Shift posted!'); setPostModal(null); setReason(''); reload();
   }
 
@@ -144,7 +159,7 @@ export function EmployeeSchedule() {
                   <div className="day-header">{key}</div>
                   <div className={`day-date ${date===todayISO?'today':''}`}>{num}</div>
                   {shift
-                    ? <div className={`shift-block ${colorFor(profile?.id)}`} onClick={()=>setPostModal(shift)}>
+                    ? <div className={`shift-block ${colorFor(profile?.id)}`} onClick={()=>{ if (!postedIds.has(shift.id)) setPostModal(shift); }}>
                         <div className="sb-pos">{shift.position}</div>
                         <div className="sb-time">{fmtTime(shift.start_time)}</div>
                         <div className="sb-time">{fmtTime(shift.end_time)}</div>
@@ -163,7 +178,7 @@ export function EmployeeSchedule() {
           <table className="table">
             <thead><tr><th>Date</th><th>Position</th><th>Start</th><th>End</th><th>Hours</th><th>Dept</th><th>Action</th></tr></thead>
             <tbody>{shifts.map(s => (
-              <tr key={s.id}><td>{fmtDate(s.shift_date)}</td><td><strong>{s.position}</strong></td><td>{fmtTime(s.start_time)}</td><td>{fmtTime(s.end_time)}</td><td>{s.duration_hours}h</td><td>{s.department}</td><td><Btn size="sm" onClick={()=>setPostModal(s)}>Post for coverage</Btn></td></tr>
+              <tr key={s.id}><td>{fmtDate(s.shift_date)}</td><td><strong>{s.position}</strong></td><td>{fmtTime(s.start_time)}</td><td>{fmtTime(s.end_time)}</td><td>{s.duration_hours}h</td><td>{s.department}</td><td>{postedIds.has(s.id) ? <Btn size="sm" disabled>Posted</Btn> : <Btn size="sm" onClick={()=>setPostModal(s)}>Post for coverage</Btn>}</td></tr>
             ))}</tbody>
           </table>
           {shifts.length===0 && <div className="table-empty">Your schedule hasn't been published yet. Check back soon.</div>}
