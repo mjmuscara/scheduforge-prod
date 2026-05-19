@@ -12,15 +12,23 @@ export function useToast() {
   return { toast, show };
 }
 
-// ── Module-level cache (persists across component mounts, clears on page refresh) ──
-const _cache = new Map();
+// ── Cache backed by sessionStorage (survives page refresh, clears on tab close) ──
 const CACHE_TTL = 90_000; // 90 seconds
+const CACHE_PFX = 'sf_';
 function getCache(key) {
   if (!key) return undefined;
-  const e = _cache.get(key);
-  return (e && Date.now() - e.ts < CACHE_TTL) ? e.data : undefined;
+  try {
+    const raw = sessionStorage.getItem(CACHE_PFX + key);
+    if (!raw) return undefined;
+    const e = JSON.parse(raw);
+    return (Date.now() - e.ts < CACHE_TTL) ? e.data : undefined;
+  } catch { return undefined; }
 }
-function setCache(key, data) { if (key) _cache.set(key, { data, ts: Date.now() }); }
+function setCache(key, data) {
+  if (!key) return;
+  try { sessionStorage.setItem(CACHE_PFX + key, JSON.stringify({ data, ts: Date.now() })); }
+  catch {} // ignore quota errors
+}
 
 // ── Employees ─────────────────────────────────────────────────────────────────
 export function useEmployees() {

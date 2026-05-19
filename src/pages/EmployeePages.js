@@ -21,6 +21,7 @@ export function EmployeeDashboard() {
   const [postModal, setPostModal] = useState(null);
   const [reason, setReason] = useState('');
   const [postedIds, setPostedIds] = useState(new Set());
+  const [claimedIds, setClaimedIds] = useState(new Set());
 
   useEffect(() => {
     if (!profile) return;
@@ -45,7 +46,8 @@ export function EmployeeDashboard() {
 
   async function handleClaim(availId) {
     const existing = requests.find(r => r.available_shift_id === availId && r.status === 'pending');
-    if (existing) return show('You already requested this shift.', 'error');
+    if (existing || claimedIds.has(availId)) return show('You already requested this shift.', 'error');
+    setClaimedIds(prev => new Set([...prev, availId]));
     await supabase.from('shift_requests').insert({ org_id: org.id, available_shift_id: availId, requester_id: profile.id, status: 'pending' });
     const avail = available.find(a => a.id === availId);
     const { data: mgrs } = await supabase.from('profiles').select('id').eq('org_id', org.id).in('role',['manager','owner']);
@@ -93,7 +95,7 @@ export function EmployeeDashboard() {
                   <div className="list-title">{a.shift?.position} · {fmtDate(a.shift?.shift_date)}</div>
                   <div className="list-meta">"{a.reason}" · {a.posted_by_profile?.name}</div>
                 </div>
-                <Btn size="sm" variant="primary" onClick={() => handleClaim(a.id)}>Claim</Btn>
+                {claimedIds.has(a.id) ? <Btn size="sm" disabled>Request Submitted</Btn> : <Btn size="sm" variant="primary" onClick={() => handleClaim(a.id)}>Claim</Btn>}
               </div>
             ))
           }
@@ -201,10 +203,12 @@ export function AvailableShifts() {
   const { available, loading, reload } = useAvailableShifts();
   const { requests } = useMyRequests();
   const { toast, show } = useToast();
+  const [claimedIds, setClaimedIds] = useState(new Set());
 
   async function handleClaim(a) {
     const already = requests.find(r => r.available_shift_id === a.id && r.status==='pending');
-    if (already) return show('You already requested this shift.','error');
+    if (already || claimedIds.has(a.id)) return show('You already requested this shift.','error');
+    setClaimedIds(prev => new Set([...prev, a.id]));
     await supabase.from('shift_requests').insert({ org_id: org.id, available_shift_id: a.id, requester_id: profile.id, status:'pending' });
     const { data: mgrs } = await supabase.from('profiles').select('id').eq('org_id',org.id).in('role',['manager','owner']);
     if (mgrs?.length) await supabase.from('notifications').insert(mgrs.map(m=>({ org_id:org.id, user_id:m.id, text:`${profile.name} requested to cover ${a.shift?.position} on ${a.shift?.shift_date}.` })));
@@ -230,7 +234,7 @@ export function AvailableShifts() {
               </div>
               <div className="avail-actions">
                 <Badge status="open" />
-                {already ? <Btn size="sm" disabled>Requested</Btn> : <Btn size="sm" variant="primary" onClick={()=>handleClaim(a)}>Request to cover</Btn>}
+                {(already || claimedIds.has(a.id)) ? <Btn size="sm" disabled>Request Submitted</Btn> : <Btn size="sm" variant="primary" onClick={()=>handleClaim(a)}>Request to cover</Btn>}
               </div>
             </div>
           );

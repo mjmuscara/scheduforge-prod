@@ -54,8 +54,8 @@ export function FormRow({ label, hint, children }) {
   );
 }
 
-export function Input({ value, onChange, placeholder, type='text', required, disabled, className='' }) {
-  return <input className={`form-input ${className}`} type={type} value={value} onChange={onChange} placeholder={placeholder} required={required} disabled={disabled} />;
+export function Input({ className='', ...rest }) {
+  return <input className={`form-input ${className}`} {...rest} />;
 }
 
 export function Select({ value, onChange, children, required }) {
