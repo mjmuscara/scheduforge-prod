@@ -29,6 +29,11 @@ export function EmployeeDashboard() {
       .then(({ data }) => setPostedIds(new Set((data || []).map(r => r.shift_id))));
   }, [profile]);
 
+  useEffect(() => {
+    const fromDB = requests.filter(r => r.status === 'pending').map(r => r.available_shift_id);
+    if (fromDB.length) setClaimedIds(prev => new Set([...prev, ...fromDB]));
+  }, [requests]);
+
   const pending = requests.filter(r => r.status === 'pending').length;
   const greetHour = new Date().getHours();
   const greeting = greetHour < 12 ? 'Good morning' : greetHour < 17 ? 'Good afternoon' : 'Good evening';
@@ -205,6 +210,11 @@ export function AvailableShifts() {
   const { toast, show } = useToast();
   const [claimedIds, setClaimedIds] = useState(new Set());
 
+  useEffect(() => {
+    const fromDB = requests.filter(r => r.status === 'pending').map(r => r.available_shift_id);
+    if (fromDB.length) setClaimedIds(prev => new Set([...prev, ...fromDB]));
+  }, [requests]);
+
   async function handleClaim(a) {
     const already = requests.find(r => r.available_shift_id === a.id && r.status==='pending');
     if (already || claimedIds.has(a.id)) return show('You already requested this shift.','error');
@@ -343,9 +353,9 @@ export function EmployeeAvailability() {
                   </label>
                   {row.is_available ? (
                     <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                      <Input type="time" value={row.start_time} onChange={e => update(dow, 'start_time', e.target.value)} style={{ width:120 }} />
+                      <Input type="time" step="900" value={row.start_time} onChange={e => update(dow, 'start_time', e.target.value)} style={{ width:120 }} />
                       <span style={{ color:'var(--muted)', fontSize:14 }}>–</span>
-                      <Input type="time" value={row.end_time}   onChange={e => update(dow, 'end_time',   e.target.value)} style={{ width:120 }} />
+                      <Input type="time" step="900" value={row.end_time}   onChange={e => update(dow, 'end_time',   e.target.value)} style={{ width:120 }} />
                     </div>
                   ) : (
                     <span style={{ fontSize:13, color:'var(--muted)' }}>Not available</span>

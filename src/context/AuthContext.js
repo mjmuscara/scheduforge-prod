@@ -23,10 +23,19 @@ function clearProfileCache() {
 }
 
 export function AuthProvider({ children }) {
+  // Read profile cache synchronously so we can skip the loading screen on refresh
+  const _boot = (() => {
+    try {
+      const p = JSON.parse(localStorage.getItem(CACHE_KEY));
+      return (p && Date.now() - p.cachedAt < 86_400_000) ? p : null;
+    } catch { return null; }
+  })();
+
   const [session,  setSession]  = useState(undefined);
-  const [profile,  setProfile]  = useState(null);
-  const [org,      setOrg]      = useState(null);
-  const [loading,  setLoading]  = useState(true);
+  const [profile,  setProfile]  = useState(_boot?.profile || null);
+  const [org,      setOrg]      = useState(_boot?.org || null);
+  // If we have a cached profile, skip the loading screen entirely
+  const [loading,  setLoading]  = useState(!_boot);
   const loadingRef = useRef(false);
 
   // ── Load profile + org ────────────────────────────────────────────────────
@@ -76,48 +85,43 @@ export function AuthProvider({ children }) {
       setLoading(false);
     }, 8000);
 
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    // Use onAuthStateChange exclusively — calling getSession() alongside it
+    // causes both to compete for Supabase's internal storage lock, which can
+    // double the wait time and produce the 9-second loading delay.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       setSession(session);
 
-      if (!session?.user) {
-        // No active session — clear any stale cache
-        clearProfileCache();
-        clearTimeout(timeout);
-        setLoading(false);
+      if (event === 'INITIAL_SESSION') {
+        if (!session?.user) {
+          clearProfileCache();
+          clearTimeout(timeout);
+          setLoading(false);
+          return;
+        }
+        const cached = readProfileCache(session.user.id);
+        if (cached) {
+          setProfile(cached.profile);
+          setOrg(cached.org);
+          clearTimeout(timeout);
+          setLoading(false);
+          loadProfileAndOrg(session.user.id); // background refresh
+        } else {
+          try {
+            await loadProfileAndOrg(session.user.id);
+          } finally {
+            clearTimeout(timeout);
+            setLoading(false);
+          }
+        }
         return;
       }
 
-      const cached = readProfileCache(session.user.id);
-      if (cached) {
-        // Cache hit: render immediately, refresh from network in background
-        setProfile(cached.profile);
-        setOrg(cached.org);
-        clearTimeout(timeout);
-        setLoading(false);
-        loadProfileAndOrg(session.user.id); // fire-and-forget background refresh
-      } else {
-        // No cache: normal blocking load (first visit or cache expired)
-        try {
-          await loadProfileAndOrg(session.user.id);
-        } finally {
-          clearTimeout(timeout);
-          setLoading(false);
-        }
-      }
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setSession(session);
       if (session?.user) {
         await loadProfileAndOrg(session.user.id);
       } else {
         setProfile(null);
         setOrg(null);
       }
-      // loading is intentionally NOT set here — it is only for the initial
-      // bootstrap (getSession above). onAuthStateChange fires concurrently with
-      // getSession and prematurely calling setLoading(false) here causes a
-      // redirect-to-login flash before the profile query finishes.
     });
 
     return () => {
@@ -264,7 +268,9 @@ export function AuthProvider({ children }) {
     return () => { supabase.removeChannel(channel); };
   }, [org?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const isAuthenticated = !!session && !!profile;
+  // session===undefined means getSession() hasn't resolved yet; treat a cached
+  // profile as authenticated to avoid a redirect flash on refresh.
+  const isAuthenticated = session === undefined ? !!profile : !!session && !!profile;
   const isOwner  = profile?.role === 'owner';
   const isManager = profile?.role === 'manager' || profile?.role === 'owner';
 

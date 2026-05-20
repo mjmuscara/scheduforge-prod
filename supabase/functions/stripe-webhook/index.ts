@@ -22,7 +22,7 @@ Deno.serve(async (req) => {
   let event: Stripe.Event;
 
   try {
-    event = stripe.webhooks.constructEvent(body, signature, Deno.env.get('STRIPE_WEBHOOK_SECRET')!);
+    event = await stripe.webhooks.constructEventAsync(body, signature, Deno.env.get('STRIPE_WEBHOOK_SECRET')!);
   } catch (err) {
     return new Response('Webhook signature verification failed', { status: 400 });
   }
@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
       max_employees: planInfo.maxEmployees,
       stripe_customer_id: sub.customer as string,
       stripe_subscription_id: sub.id,
-      plan_expires_at: new Date(sub.current_period_end * 1000).toISOString(),
+      plan_expires_at: (() => { const t = (sub as any).current_period_end ?? sub.items?.data?.[0]?.current_period_end; return t ? new Date(t * 1000).toISOString() : null; })(),
     }).eq('id', orgId);
   }
 

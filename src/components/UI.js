@@ -1,8 +1,8 @@
 import React from 'react';
 import './UI.css';
 
-export function Btn({ children, variant='default', size='md', onClick, disabled, type='button', full }) {
-  return <button type={type} className={`btn btn-${variant} btn-${size}${full?' btn-full':''}`} onClick={onClick} disabled={disabled}>{children}</button>;
+export function Btn({ children, variant='default', size='md', onClick, disabled, type='button', full, style }) {
+  return <button type={type} className={`btn btn-${variant} btn-${size}${full?' btn-full':''}`} onClick={onClick} disabled={disabled} style={style}>{children}</button>;
 }
 
 export function Card({ children, className='', style }) {

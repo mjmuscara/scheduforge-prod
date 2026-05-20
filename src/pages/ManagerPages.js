@@ -146,6 +146,8 @@ export function ScheduleBuilder() {
   const [form, setForm] = useState({ employeeId:'', date:'', startTime:'', endTime:'', position:'', department:'' });
   const [availWarn, setAvailWarn] = useState('');
   const [copying, setCopying] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [clearConfirm, setClearConfirm] = useState(false);
 
   useEffect(() => {
     if (!viewingManagerId) { setViewingTeam([]); return; }
@@ -220,6 +222,26 @@ export function ScheduleBuilder() {
       reloadShifts();
     } catch (err) { show(err.message, 'error'); }
     finally { setCopying(false); }
+  }
+
+  function handleClearAll() {
+    const todayStr = toISO(new Date());
+    const removable = shifts.filter(s => s.shift_date >= todayStr);
+    if (!removable.length) return show('No upcoming shifts to clear this week.', 'error');
+    setClearConfirm(true);
+  }
+
+  async function handleClearConfirmed() {
+    const todayStr = toISO(new Date());
+    const removable = shifts.filter(s => s.shift_date >= todayStr);
+    setClearConfirm(false);
+    setClearing(true);
+    try {
+      await supabase.from('shifts').delete().eq('org_id', org.id).in('id', removable.map(s => s.id));
+      show(`Cleared ${removable.length} shift${removable.length > 1 ? 's' : ''}.`);
+      reloadShifts();
+    } catch (err) { show(err.message, 'error'); }
+    finally { setClearing(false); }
   }
 
   function openAdd(date='') { setPrefill(date); setAvailWarn(''); setForm(f=>({...f,date,employeeId:'',startTime:'',endTime:'',position:'',department:''})); setAddModal(true); }
@@ -338,6 +360,7 @@ export function ScheduleBuilder() {
           <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
             <Btn size="sm" onClick={() => openAdd()}>+ Add shift</Btn>
             <Btn size="sm" onClick={handleCopyLastWeek} disabled={copying}>{copying ? <Spinner /> : 'Copy last week'}</Btn>
+            <Btn size="sm" onClick={handleClearAll} disabled={clearing} style={{ color:'#e03131', borderColor:'#e03131', background:'transparent' }}>{clearing ? <Spinner /> : 'Clear all'}</Btn>
             <Btn size="sm" onClick={() => setTemplateModal(true)}>Auto-generate</Btn>
             <Btn size="sm" variant="primary" onClick={handlePublish}>{schedule?.published ? '✓ Published' : 'Publish schedule'}</Btn>
           </div>
@@ -433,6 +456,15 @@ export function ScheduleBuilder() {
       </Modal>
 
       {/* Remove confirm */}
+      <Modal isOpen={clearConfirm} onClose={() => setClearConfirm(false)} title="Clear all shifts?">
+        <p style={{fontSize:14,color:'var(--muted)',marginBottom:8}}>This will remove all upcoming shifts for this week. Shifts that have already happened will not be affected.</p>
+        <p style={{fontSize:14,fontWeight:600,color:'var(--text)',marginBottom:20}}>This cannot be undone.</p>
+        <div className="modal-actions">
+          <Btn onClick={() => setClearConfirm(false)}>Cancel</Btn>
+          <Btn onClick={handleClearConfirmed} style={{ background:'#e03131', color:'#fff', borderColor:'#e03131' }}>Clear all</Btn>
+        </div>
+      </Modal>
+
       <Modal isOpen={!!confirmDel} onClose={() => setConfirmDel(null)} title="Remove shift?">
         {confirmDel && (
           <>

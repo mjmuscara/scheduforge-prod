@@ -32,12 +32,14 @@ Deno.serve(async (req) => {
     { global: { headers: { Authorization: authHeader } } },
   );
 
+  const { data: { user } } = await userClient.auth.getUser();
   const { data: profile, error } = await userClient
     .from('profiles')
     .select('org_id, role')
+    .eq('id', user?.id)
     .single();
 
-  if (error || !profile || profile.role !== 'manager') {
+  if (error || !profile || !['manager', 'owner'].includes(profile.role)) {
     return new Response('Unauthorized', { status: 401, headers: corsHeaders });
   }
 

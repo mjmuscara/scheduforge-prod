@@ -33,16 +33,18 @@ Deno.serve(async (req) => {
     { global: { headers: { Authorization: authHeader } } },
   );
 
+  const { data: { user } } = await userClient.auth.getUser();
   const { data: profile, error } = await userClient
     .from('profiles')
     .select('org_id, role')
+    .eq('id', user?.id)
     .single();
 
   if (error || !profile) {
     return new Response('Unauthorized', { status: 401, headers: corsHeaders });
   }
 
-  if (profile.role !== 'manager') {
+  if (!['manager', 'owner'].includes(profile.role)) {
     return new Response('Forbidden', { status: 403, headers: corsHeaders });
   }
 
